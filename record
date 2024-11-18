@@ -60,7 +60,7 @@ function fish_postexec --on-event fish_prompt
     if test \( "$first_word" = nvim -o "$first_word" = v \) -a (count $words) -eq 2
         if test -f $orig_file -a $status -eq 0
             set -l IFS
-            set patch_output (diff -u $temp_file $orig_file)
+            set patch_output (diff -u -L $orig_file $temp_file $orig_file)
             if test -n "$patch_output"
                 echo "# "(date +"%Y-%m-%d %H:%M:%S") >> $OUT_FILE
                 echo "# Original command: nvim $orig_file" >> $OUT_FILE
@@ -82,7 +82,6 @@ end
 
 # Notify user about logging
 echo "Logging commands to $OUT_FILE"
-echo "Exit shell to stop logging"
 '
 
 # Start a new Fish shell with the initialization command

@@ -1,0 +1,17 @@
+function prompt_ls
+    printf '\033[s\n\n\n\n\n\n\n\n\n\n'
+    set ls_dirs (eza --only-dirs --group-directories-first --show-symlinks --color=always)
+    echo $ls_dirs
+    set ls_files (eza --only-files --group-directories-first --show-symlinks --color=always)
+    echo $ls_files
+    printf '\033[u'
+end
+
+function prompt_clear_ls --on-event fish_preexec
+    printf '\033[s\n\n\n\n\n\n\n\n\n'
+    printf '\033[2K'
+    echo
+    printf '\033[2K'
+    printf '\033[u'
+end
+

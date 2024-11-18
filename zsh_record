@@ -1,0 +1,74 @@
+#!/bin/zsh
+
+# Use first argument as output file, or default to commands.sh
+outfile=${1:-commands.sh}
+touch $outfile
+chmod +x $outfile
+
+# Get absolute path of the output file
+outfile=$(realpath "$outfile")
+
+# Export the output file path so the new shell can see it
+export OUT_FILE="$outfile"
+
+# The initialization command that sets up our logging and custom nvim function
+init_cmd='
+# Custom nvim function that creates patches for single-file edits
+alias v=nvim
+nvim() {
+    if [ "$#" -ne 1 ]; then
+        command nvim "$@"
+        return
+    fi
+    
+    local orig_file="$1"
+    local temp_file=$(mktemp)
+    cp "$orig_file" "$temp_file"
+    
+    command nvim "$orig_file"
+    
+    if [ $? -eq 0 ]; then
+        local patch_output=$(diff -u "$temp_file" "$orig_file")
+        if [ ! -z "$patch_output" ]; then
+            print -r "# Original command: nvim $orig_file" >> $OUT_FILE
+            print -r "patch $orig_file << '\''END_OF_PATCH'\''" >> $OUT_FILE
+            print -r -- "$patch_output" >> $OUT_FILE
+            print -r "END_OF_PATCH" >> $OUT_FILE
+            print -r "" >> $OUT_FILE
+        fi
+    fi
+    
+    /bin/rm "$temp_file"
+}
+
+# Command history logging function
+zshaddhistory() {
+    # Ignore commands that start with a space
+    [[ "$1" =~ ^[[:space:]] ]] && return
+    
+    # Split command into an array of words
+    local words=(${(z)1})  # Split the command string by whitespace
+    local first_word="${words[1]}"
+    local arg_count="${#words[@]}"
+
+    print -r "# $(date +"%Y-%m-%d %H:%M:%S")" >> $OUT_FILE
+    # Check if first word is `nvim` and there is exactly one argument
+    if [[ "$first_word" == (nvim|v) && "$arg_count" -eq 3 ]]; then
+        # The above nvim function handles it
+    else
+        # Log other commands
+        print -r "$1" >> $OUT_FILE
+    fi
+}
+
+# Enable HIST_IGNORE_SPACE to ignore commands starting with a space in history
+setopt HIST_IGNORE_SPACE
+
+PS1="${PS1}[LOGGING] "
+print "Logging commands to $OUT_FILE"
+print "Exit shell to stop logging"
+'
+
+# Use zshi to start a new shell with our initialization
+zshi "$init_cmd" -i
+

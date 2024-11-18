@@ -1,9 +1,9 @@
 #!/usr/bin/env fish
 
 # Use the first argument as the output file, or default to commands.sh
-set outfile $argv[1] commands.bash ; set outfile $outfile[1]
+set outfile $argv[1] commands.fish ; set outfile $outfile[1]
 if not test -e $outfile
-    echo '#!/usr/bin/env bash' >> $outfile
+    echo '#!/usr/bin/env fish' >> $outfile
 end
 chmod +x $outfile
 
@@ -13,10 +13,8 @@ set outfile (realpath "$outfile")
 # Export the output file path so the new shell can see it
 set -gx OUT_FILE "$outfile"
 
-# The initialization command that sets up logging and a custom nvim function which creates patches
+# The initialization command that sets up logging and a custom nvim function
 set init_cmd '
-set file_sep (echo (openssl rand -base64 32 | tr -dc A-Za-z))
-
 # Custom nvim function that creates patches for single-file edits
 function v -w "nvim"
     nvim $argv
@@ -28,11 +26,23 @@ function nvim
         return
     end
 
-    set -g orig_file $argv[1]
-    set -g temp_file (mktemp)
-    cp $orig_file $temp_file 2>/dev/null
+    set orig_file $argv[1]
+    set temp_file (mktemp)
+    cp $orig_file $temp_file
 
     command nvim $orig_file
+
+    if test $status -eq 0
+        set -l IFS
+        set patch_output (diff -u $temp_file $orig_file)
+        if test -n "$patch_output"
+            echo "# Original command: nvim $orig_file" >> $OUT_FILE
+            echo echo "\'(string replace -a "\'" "\\\'" "$patch_output")\'" "|" patch $orig_file >> $OUT_FILE
+            echo "" >> $OUT_FILE
+        end
+    end
+
+    rm $temp_file
 end
 
 # Simulate preexec functionality using fish_postexec and checking command history
@@ -56,26 +66,14 @@ function fish_postexec --on-event fish_prompt
     set words (string split " " $last_command)
     set first_word $words[1]
 
+    echo "# "(date +"%Y-%m-%d %H:%M:%S") >> $OUT_FILE
     # Check if first word is `nvim` or `v` and there is exactly one argument
     if test \( "$first_word" = nvim -o "$first_word" = v \) -a (count $words) -eq 2
-        if test -f $orig_file -a $status -eq 0
-            set -l IFS
-            set patch_output (diff -u $temp_file $orig_file)
-            if test -n "$patch_output"
-                echo "# "(date +"%Y-%m-%d %H:%M:%S") >> $OUT_FILE
-                echo "# Original command: nvim $orig_file" >> $OUT_FILE
-                echo "patch <<\"$file_sep\"" >> $OUT_FILE
-                echo "$patch_output" >> $OUT_FILE
-                echo "$file_sep" >> $OUT_FILE
-                echo "" >> $OUT_FILE
-            end
-        end
-
-        rm $temp_file
+        # The above nvim function handles it
         return
     end
 
-    echo "# "(date +"%Y-%m-%d %H:%M:%S") >> $OUT_FILE
+    # echo "Saving $last_command"
     echo "$last_command" >> $OUT_FILE
     echo "" >> $OUT_FILE
 end
@@ -84,6 +82,8 @@ end
 echo "Logging commands to $OUT_FILE"
 echo "Exit shell to stop logging"
 '
+
+echo "$init_cmd"
 
 # Start a new Fish shell with the initialization command
 fish -C "$init_cmd" -i
